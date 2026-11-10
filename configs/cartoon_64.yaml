@@ -1,16 +1,11 @@
-# Secondary model: same architecture trained from scratch on Google Cartoon Set, 64px.
+# Secondary model (PLAN.md phase 5): same architecture on Google Cartoon Set.
+# Needs cartoon80_{train,val}.npy (+ probe lists) — preprocessing script not written yet.
 name: cartoon_64
-train_dir: ${CNF_DATA}/raw/cartoonset
-probe_dir: ${CNF_DATA}/processed/car_fronts_64
-image_size: 64
-grayscale: true
-augment: true
-base_channels: 64
-latent_dim: 256
-batch_size: 128
-lr: 0.0002
-loss: l1
-max_steps: 20000
+data_dir: ${CNF_DATA}/processed
+faces: cartoon80
+latent_dim: 128
+beta: 1.0
+epochs: 100
 run_dir: ${CNF_RUNS}/cartoon_64
 wandb_project: carsnfaces
 tags: [cartoon, secondary, 64px]

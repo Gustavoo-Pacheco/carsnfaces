@@ -21,9 +21,9 @@ Testing:   car  ──► encoder ──► latent ──► decoder ──► f
 
 | | |
 |---|---|
-| **Main model** | Convolutional autoencoder, built from scratch, trained on real faces (CelebA) |
+| **Main model** | Convolutional β-VAE, built from scratch, trained on real faces (CelebA), with a sweep over β and latent size |
 | **Secondary model** | Same architecture, trained on drawn faces (Google Cartoon Set) |
-| **Input cars** | ~40 hand-picked car fronts from Stanford Cars (plus rears as controls) |
+| **Input cars** | Car fronts from DVM-CAR (plus rears as controls); ~40 hand-picked for the survey |
 | **Human study** | 15–30 participants, web survey: 4-trait ratings + matching test |
 | **Resolution** | 64px first, then 128px |
 
@@ -47,6 +47,7 @@ Full rationale, design and open questions: [`CONTEXT.md`](CONTEXT.md).
 ```
 ├── CONTEXT.md                  idea, decisions, open questions
 ├── PLAN.md                     step-by-step plan with checkboxes
+├── BASELINE.md                 spec of the first training run
 ├── configs/                    one YAML per experiment
 ├── src/carsnfaces/
 │   ├── config.py               YAML → Config
@@ -55,7 +56,7 @@ Full rationale, design and open questions: [`CONTEXT.md`](CONTEXT.md).
 │   ├── train.py                training loop, W&B logging, auto-resume
 │   └── infer.py                cars → faces
 ├── scripts/
-│   ├── download_data.sh        CelebA / Cartoon Set / Stanford Cars
+│   ├── download_data.sh        CelebA / Cartoon Set / DVM-CAR
 │   └── prepare_images.py       select, square and resize images
 ├── notebooks/                  Colab notebooks (train, cars → faces)
 ├── data/selections/            hand-picked car lists
@@ -90,7 +91,7 @@ All usable without an approval process:
 |---|---|---|
 | CelebA | Real faces (main model) | [Kaggle](https://www.kaggle.com/datasets/jessicali9530/celeba-dataset) |
 | Google Cartoon Set | Drawn faces (secondary model) | [google.github.io/cartoonset](https://google.github.io/cartoonset/) (CC-BY 4.0; needs Google sign-in) |
-| Stanford Cars | Car fronts and rears | [Kaggle](https://www.kaggle.com/datasets/eduardo4jesus/stanford-cars-dataset) |
+| DVM-CAR | Car fronts (61,827 checked, background removed) and rears | [deepvisualmarketing.github.io](https://deepvisualmarketing.github.io/) (CC BY-NC 4.0) |
 
 Datasets are not redistributed in this repo; each keeps its own license and terms.
 

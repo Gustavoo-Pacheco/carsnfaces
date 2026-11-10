@@ -1,17 +1,18 @@
-# Tiny run to check the pipeline end to end (seconds on CPU). No W&B.
+# Pipeline check (BASELINE.md §7 step 1): tiny model, 200 steps, a few minutes on any GPU. No W&B.
 name: smoke_test
-train_dir: ${CNF_DATA}/raw/celeba
-probe_dir: ${CNF_DATA}/processed/car_fronts_64
-image_size: 64
-grayscale: true
-augment: true
-base_channels: 16
+data_dir: ${CNF_DATA}/processed
+max_train_images: 20000
+channels: [32, 32, 64, 64]
+res_blocks_per_stage: 1
+gn_groups: 8
 latent_dim: 32
-batch_size: 16
-max_steps: 20
-log_every: 5
-sample_every: 10
-ckpt_every: 10
-num_workers: 0
+batch_size: 64
+lr_warmup_steps: 20
+kl_warmup_steps: 50
+max_steps: 200
+log_every: 20
+eval_every: 100
+ckpt_every: 50
+milestone_epochs: []
 run_dir: ${CNF_RUNS}/smoke_test
 wandb_mode: disabled

@@ -3,7 +3,7 @@
 The idea, decisions and stack are in [`CONTEXT.md`](CONTEXT.md). This file is the order of work. Tick boxes as you go.
 
 **Stack:** Colab Pro (GPU) · PyTorch (from scratch) · Weights & Biases free plan · Google Drive (data + checkpoints) · Claude artifact (survey)
-**Datasets (no approval needed, for now):** CelebA, Google Cartoon Set, Stanford Cars
+**Datasets (no approval needed, for now):** CelebA, Google Cartoon Set, DVM-CAR
 
 ## Project layout
 
@@ -11,6 +11,7 @@ The idea, decisions and stack are in [`CONTEXT.md`](CONTEXT.md). This file is th
 carsnfaces/
 ├── CONTEXT.md                  idea, decisions, open questions
 ├── PLAN.md                     this file
+├── BASELINE.md                 spec of the first training run
 ├── configs/                    one YAML per experiment
 │   ├── faces_64.yaml           main model (CelebA)
 │   ├── cartoon_64.yaml         secondary model (Cartoon Set)
@@ -22,7 +23,7 @@ carsnfaces/
 │   ├── train.py                training loop, W&B logging, auto-resume
 │   └── infer.py                cars → faces (+ latents)
 ├── scripts/
-│   ├── download_data.sh        CelebA / Cartoon Set / Stanford Cars
+│   ├── download_data.sh        CelebA / Cartoon Set / DVM-CAR
 │   └── prepare_images.py       select + square + resize images
 ├── notebooks/
 │   ├── 01_train_autoencoder.ipynb
@@ -45,14 +46,18 @@ carsnfaces/
 
 ## Phase 1: Data (~half a day)
 
-- [ ] 1.1 Download CelebA and Stanford Cars (notebook 01, "Download data").
-- [ ] 1.2 Download Cartoon Set (needs Google sign-in in Colab; no approval).
-- [ ] 1.3 **Pick car fronts by hand:** browse Stanford Cars and list ~60 clear, roughly frontal views in `data/selections/car_fronts.txt` (paths relative to the dataset folder, e.g. `cars_train/00042.jpg`). Aim for variety: sedans, SUVs, trucks, sports cars, old/new, "angry" and "friendly" looking ones. Also list ~10 rear views in `car_rears.txt` (controls).
-  - Stanford Cars has few pure front views; tight 3/4 views are acceptable if both headlights are visible.
-  - *Optional helper:* a small picker page (artifact) to click through images and export the list.
-- [ ] 1.4 Run `prepare_images.py` for fronts and rears at 64px. Look at the result: the car should fill most of the square.
+Details in [`BASELINE.md`](BASELINE.md) §1.
 
-**Done when:** `data/processed/car_fronts_64/` has ~60 good images.
+- [ ] 1.1 Download CelebA; preprocess to 80×80 grayscale NumPy arrays using the official train/val/test split.
+- [ ] 1.2 Download DVM-CAR quality-checked front views (730 MB) and the tables (CSV).
+- [ ] 1.3 Download the full DVM-CAR image set to Colab's local disk; use `Image_table.csv` to extract a few hundred **rear** views; save only those to Drive.
+- [ ] 1.4 Preprocess cars: crop to the car → pad to square (white) → 64×64 grayscale. Look at the result: the car should fill the frame.
+- [ ] 1.5 Save the fixed probe/eval lists (`probe_faces`, `probe_fronts`, `probe_rears`, `eval_*`) to `data/selections/`.
+- [ ] 1.6 Download Cartoon Set (needs Google sign-in in Colab; no approval). Only needed for phase 5.
+- [ ] 1.7 **Pick the ~60 study cars by hand** from the DVM fronts (40 for the survey + spares) into `data/selections/car_fronts.txt`. Aim for variety: sedans, SUVs, vans, sports cars, old/new, "angry" and "friendly" looking ones.
+  - *Optional helper:* a small picker page (artifact) to click through images and export the list.
+
+**Done when:** CelebA arrays, preprocessed fronts/rears and the probe lists are on Drive.
 
 ## Phase 2: Trait pilot (in parallel with phase 3, ~1 day of waiting)
 
@@ -62,36 +67,56 @@ carsnfaces/
 
 **Done when:** 4 traits are fixed and the 40 study cars are chosen.
 
-## Phase 3: Main model, real faces, 64px (~1–2 days)
+## Phase 3: Main model, real faces, 64px: β-VAE sweep over β and latent size (~2–4 days)
+
+The first model is a **β-VAE** (a variational autoencoder whose loss is `reconstruction + β · KL`). Two knobs control how strongly a car is pushed toward a face:
+
+| Knob | Low value | High value |
+|---|---|---|
+| **β** (weight of the KL term) | Copies the input closely, so a car comes out looking like a car | Pulled toward the "average face", so every car may give the same generic face |
+| **Latent size** | Squeezes everything into a few face features, giving more face-like but less car-specific outputs | Keeps more detail, so the car leaks through |
+
+The interesting zone is in the middle: outputs that are clearly **faces** but still **different for each car**. The sweep maps that trade-off.
+
+**Code needed first** (the scaffold currently has a plain autoencoder): add a VAE variant to `model.py` (encoder outputs μ and log σ², reparameterization), `beta` and `kl_warmup_steps` config fields, and log `train/recon`, `train/kl` and random-prior samples to W&B.
 
 - [ ] 3.1 Smoke test: `configs/smoke_test.yaml` (runs in seconds, no W&B).
-- [ ] 3.2 Train `configs/faces_64.yaml` (30k steps; expect ~1–2 h on a Colab GPU). Watch in W&B:
-  - `train/loss` and `val/loss` going down
-  - `samples/faces`: held-out faces reconstructed recognizably
-  - `samples/cars_to_faces`: the first car→face results
-- [ ] 3.3 Run `notebooks/02_cars_to_faces.ipynb` on fronts **and** rears. Look at the pairs.
-- [ ] 3.4 **Sanity checks** (these decide whether the idea works):
+- [ ] 3.2 **Baseline run:** residual β-VAE, β = 1, latent = 128, 100 epochs. Spec and step-by-step run plan in [`BASELINE.md`](BASELINE.md). Its learning curve sets the sweep run length.
+- [ ] 3.3 **Coarse sweep** (W&B Sweeps, free plan; run length set by the baseline's learning curve, shorter than 100 epochs):
+  - β ∈ {0.1, 0.5, 1, 2, 4, 8}
+  - latent ∈ {16, 32, 64, 128, 256}
+  - 30 runs. If Colab time is tight, start with the 3×3 corner-and-middle grid β {0.5, 2, 8} × latent {32, 128, 256}.
+  - Use the same seed, data split, probe cars and KL warm-up in every run.
+- [ ] 3.4 **Compare runs** on the same probe cars (fronts and rears). For each run log:
+  - **Face fidelity:** validation reconstruction loss on held-out faces.
+  - **KL / active latent units:** how many latent dimensions are actually used.
+  - **Face-likeness of car outputs:** how close the car's latent is to the face distribution (e.g. KL of the car's posterior to the prior), and optionally a classic, non-deep face detector (OpenCV Haar cascade) on the outputs.
+  - **Car specificity:** diversity of outputs across cars (mean pairwise distance), and whether similar cars give similar faces (correlation between car–car and face–face distances).
+  - **Front vs rear gap:** fronts should be more face-like than rears.
+  - **Visual grid:** the same 16 cars through every run, side by side (W&B panel or a notebook figure).
+- [ ] 3.5 **Plot the trade-off:** face-likeness vs car specificity, one point per (β, latent) run. Pick 1–3 configs on the "good" edge and run a **fine sweep** around them (e.g. β ±50%, neighboring latent sizes) at full length.
+- [ ] 3.6 **Sanity checks** on the chosen config(s):
   - **Template check:** shift/scale a few cars inside the frame. Do the eyes follow the headlights, or stay at fixed pixels? If fixed, increase augmentation.
   - **Selectivity check:** do fronts give clearer faces than rears?
-  - **Variety check:** do different cars give *different* faces, or always the same average face?
-- [ ] 3.5 Write down findings in `CONTEXT.md` (decisions section).
+  - **Variety check:** do different cars give *different* faces?
+- [ ] 3.7 Record the sweep results and the chosen (β, latent) in `CONTEXT.md`. The β/latent trade-off plot is itself a result for the paper.
 
-**Done when:** car→face outputs are varied and follow the car's structure. If faces are all the same blur, go to phase 4 before anything else.
+**Done when:** one (β, latent) config is chosen whose car→face outputs are clearly faces, vary between cars, and follow the car's structure.
 
 ## Phase 4: Improve the model (iterate as needed)
 
-Try one change at a time, each as a new config + W&B run, compared on the same probe cars:
+Try one change at a time on the chosen (β, latent), each as a new config + W&B run, compared on the same probe cars:
 
-- [ ] 4.1 Latent size (64 / 128 / 256 / 512): a smaller latent gives more "face-like" outputs, a bigger one copies the car more. This is the key knob.
-- [ ] 4.2 Color vs grayscale.
-- [ ] 4.3 Sharper outputs: VAE, or adversarial loss (discriminator trained from scratch), still no pretrained networks.
-- [ ] 4.4 Scale up to **128px** once 64px works (new config `faces_128.yaml`).
+- [ ] 4.1 Color vs grayscale.
+- [ ] 4.2 Sharper outputs: adversarial loss (VAE-GAN, discriminator trained from scratch), still no pretrained networks.
+- [ ] 4.3 Scale up to **128px** once 64px works (new config `faces_128.yaml`). Re-check β, since the best value can shift with resolution.
+- [ ] 4.4 Ideas from [`BASELINE.md`](BASELINE.md) §9: attention, other downsampling, Gaussian decoder with learned σ, β-TCVAE.
 
 **Done when:** one config is chosen as *the* main model; its checkpoint is frozen.
 
 ## Phase 5: Secondary model, Cartoon Set
 
-- [ ] 5.1 Train `configs/cartoon_64.yaml` with the architecture chosen in phase 4.
+- [ ] 5.1 Train `configs/cartoon_64.yaml` with the architecture and (β, latent) chosen in phases 3–4 (optionally a small β sweep, since cartoons are simpler and may need a smaller latent).
 - [ ] 5.2 Generate faces for the ~20 shared cars; run the same sanity checks.
 
 **Done when:** cartoon faces exist for the shared 20 cars.
@@ -121,6 +146,6 @@ Try one change at a time, each as a new config + W&B run, compared on the same p
 
 ## Later (not now)
 
-- CompCars (viewpoint labels, but needs a request form) for more and better front views.
+- CompCars (needs a request form) or Wikimedia Commons front views, for more varied real-world car photos.
 - Other pareidolia objects (Faces in Things dataset).
 - Diffusion / SDEdit comparison.

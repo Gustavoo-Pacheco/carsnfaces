@@ -1,0 +1,29 @@
+# Baseline (BASELINE.md): 64px grayscale residual beta-VAE on CelebA, beta = 1, latent 128, 100 epochs.
+# The sweep (PLAN.md 3.3) changes only beta, latent_dim and the run length.
+name: faces_64_baseline
+data_dir: ${CNF_DATA}/processed
+faces: celeba80
+fronts: dvm_fronts64
+rears: dvm_rears64
+image_size: 64
+channels: [64, 128, 256, 512]
+res_blocks_per_stage: 2
+gn_groups: 32
+latent_dim: 128
+beta: 1.0
+kl_warmup_steps: 5000
+batch_size: 128
+lr: 0.0005
+lr_min: 0.00005
+lr_warmup_steps: 1000
+epochs: 100
+precision: auto
+seed: 0
+log_every: 100
+eval_every: 2500
+ckpt_every: 5000
+milestone_epochs: [5, 10, 25, 50, 100]
+run_dir: ${CNF_RUNS}/faces_64_baseline
+wandb_project: carsnfaces
+wandb_artifact: baseline-v1
+tags: [faces, main, 64px, baseline]

@@ -72,8 +72,11 @@ Testing:   car  ──► encoder ──► latent ──► decoder ──► f
 | Drawn-face dataset | **Google Cartoon Set** |
 | Resolution | **64px first**, scale up (128px+) once the pipeline works |
 | Survey | Custom website as a **Claude artifact** (responses in the artifact's built-in database) |
-| Datasets | **Only datasets with no approval/request form, for now.** CelebA (Kaggle), Google Cartoon Set (direct download), Stanford Cars (Kaggle). CompCars postponed. |
+| Datasets | **Only datasets with no approval/request form, for now.** CelebA (Kaggle), Google Cartoon Set (direct download), **DVM-CAR** (Figshare/Dropbox, CC BY-NC 4.0: 61,827 checked front views, background removed; rears from the full set). Stanford Cars dropped; CompCars postponed. |
+| Baseline run | 64px grayscale **residual** conv β-VAE, β = 1, latent 128, GroupNorm + SiLU, BCE summed + KL with warm-up, **100 epochs** with milestone checkpoints. Spec and run plan in `BASELINE.md`. |
+| Future model ideas | Attention, other downsampling, Gaussian decoder with learned σ, β-TCVAE (`BASELINE.md` §9) |
 | Stack | **Colab Pro + Weights & Biases (free plan)** |
+| First model | **β-VAE** with a sweep over **β** and **latent size**, comparing how face-like vs car-specific the outputs are (PLAN.md phase 3) |
 
 ### Stack
 
@@ -125,6 +128,5 @@ Trait ratings always come before the matching test, so nobody has seen car–fac
 ## Open questions
 
 - **Survey access:** confirm participants can open and answer the artifact link (test with 1–2 people before the real study).
-- **Car fronts:** Stanford Cars has no viewpoint labels, so front views are picked by hand (~60 images: 40 for the study + spares + a few rears as controls).
 - **Grayscale vs color:** configs default to grayscale (avoids car color leaking into faces); revisit after the first run.
 - **Loss / "from scratch":** does a pretrained network used *only inside the loss* (e.g. VGG perceptual loss) count as breaking "from scratch"? Default: no pretrained anything; start with L1.

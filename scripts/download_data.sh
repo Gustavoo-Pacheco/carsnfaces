@@ -1,59 +1,44 @@
 #!/usr/bin/env bash
 # Download the datasets (no approval or request forms needed).
 #
-#   bash scripts/download_data.sh [celeba|cartoon|cars|all] [DATA_DIR]
+#   bash scripts/download_data.sh [celeba|dvm|dvm-full|cartoon] [DEST_DIR]
 #
-# CelebA and Stanford Cars come from Kaggle: needs a free Kaggle account and an API
-# token at ~/.kaggle/kaggle.json (Kaggle > Settings > API > Create New Token).
-# On Colab, notebooks/01_train_autoencoder.ipynb sets this up.
+# Downloads go to DEST_DIR (default: /content/raw on Colab's local disk — fast, and
+# the raw files are not needed after preprocessing; only the processed arrays go to Drive).
+#   celeba    CelebA aligned & cropped via kagglehub (public dataset, no Kaggle token needed)   ~1.4 GB
+#   dvm       DVM-CAR quality-checked fronts + tables (Figshare, CC BY-NC 4.0)                 ~0.9 GB
+#   dvm-full  DVM-CAR full resized image set, needed only to pick rear views                    ~14.6 GB
+#   cartoon   Google Cartoon Set 10k (needs a signed-in Google account; phase 5 only)
 set -euo pipefail
 
-WHAT="${1:-all}"
-DATA="${2:-${CNF_DATA:-data}}"
-RAW="$DATA/raw"
-mkdir -p "$RAW"
+WHAT="${1:?usage: $0 [celeba|dvm|dvm-full|cartoon] [DEST_DIR]}"
+DEST="${2:-/content/raw}"
+mkdir -p "$DEST"
 
-celeba() {
-  echo "== CelebA (aligned & cropped, ~200k images, ~1.4 GB)"
-  kaggle datasets download -d jessicali9530/celeba-dataset -p "$RAW/celeba_zip"
-  unzip -q -o "$RAW/celeba_zip/"*.zip -d "$RAW/celeba_zip"
-  # keep only the image folder
-  mkdir -p "$RAW/celeba"
-  find "$RAW/celeba_zip" -name '*.jpg' -exec mv -t "$RAW/celeba" {} + 2>/dev/null \
-    || find "$RAW/celeba_zip" -name '*.jpg' -exec mv {} "$RAW/celeba/" \;
-  rm -rf "$RAW/celeba_zip"
-  echo "   $(ls "$RAW/celeba" | wc -l) images in $RAW/celeba"
-}
-
-cartoon() {
-  echo "== Google Cartoon Set (10k, CC-BY 4.0)"
-  # Source: https://google.github.io/cartoonset/
-  # The bucket needs a signed-in Google account (no approval). On Colab, run
-  # `from google.colab import auth; auth.authenticate_user()` first.
-  # Locally: `gcloud auth login`, or download the file in a signed-in browser and put
-  # it at $RAW/cartoonset10k.tgz before running this.
-  mkdir -p "$RAW/cartoonset"
-  if [ ! -f "$RAW/cartoonset10k.tgz" ]; then
-    gsutil cp gs://cartoonset_public_files/cartoonset10k.tgz "$RAW/cartoonset10k.tgz"
-  fi
-  tar -xzf "$RAW/cartoonset10k.tgz" -C "$RAW/cartoonset" --strip-components=1
-  rm "$RAW/cartoonset10k.tgz"
-  find "$RAW/cartoonset" -name '*.csv' -delete  # attribute files, not needed
-  echo "   $(ls "$RAW/cartoonset" | wc -l) images in $RAW/cartoonset"
-}
-
-cars() {
-  echo "== Stanford Cars (~16k images)"
-  kaggle datasets download -d eduardo4jesus/stanford-cars-dataset -p "$RAW/stanford_cars_zip"
-  unzip -q -o "$RAW/stanford_cars_zip/"*.zip -d "$RAW/stanford_cars"
-  rm -rf "$RAW/stanford_cars_zip"
-  echo "   extracted to $RAW/stanford_cars"
+fetch() {  # url file
+  if [ -s "$DEST/$2" ]; then echo "   $2 already there"; return; fi
+  curl -L --fail --retry 5 -C - -o "$DEST/$2.part" "$1" && mv "$DEST/$2.part" "$DEST/$2"
 }
 
 case "$WHAT" in
-  celeba) celeba ;;
-  cartoon) cartoon ;;
-  cars) cars ;;
-  all) celeba; cartoon; cars ;;
-  *) echo "usage: $0 [celeba|cartoon|cars|all] [DATA_DIR]"; exit 1 ;;
+  celeba)
+    echo "== CelebA (Kaggle jessicali9530/celeba-dataset)"
+    python -c "import kagglehub; print(kagglehub.dataset_download('jessicali9530/celeba-dataset'))" \
+      | tail -1 > "$DEST/celeba_path.txt"
+    echo "   path: $(cat "$DEST/celeba_path.txt")"
+    ;;
+  dvm)
+    echo "== DVM-CAR fronts + tables"
+    fetch https://ndownloader.figshare.com/files/34792480 Confirmed_fronts.zip
+    fetch https://ndownloader.figshare.com/files/38754867 tables_V2.0.zip
+    ;;
+  dvm-full)
+    echo "== DVM-CAR full image set (14.6 GB, for rear views)"
+    fetch https://ndownloader.figshare.com/files/34792453 resized_DVM_v2.zip
+    ;;
+  cartoon)
+    echo "== Google Cartoon Set 10k (run google.colab.auth.authenticate_user() first)"
+    gsutil cp gs://cartoonset_public_files/cartoonset10k.tgz "$DEST/cartoonset10k.tgz"
+    ;;
+  *) echo "unknown: $WHAT"; exit 1 ;;
 esac

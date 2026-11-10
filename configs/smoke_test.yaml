@@ -1,0 +1,17 @@
+# Tiny run to check the pipeline end to end (seconds on CPU). No W&B.
+name: smoke_test
+train_dir: ${CNF_DATA}/raw/celeba
+probe_dir: ${CNF_DATA}/processed/car_fronts_64
+image_size: 64
+grayscale: true
+augment: true
+base_channels: 16
+latent_dim: 32
+batch_size: 16
+max_steps: 20
+log_every: 5
+sample_every: 10
+ckpt_every: 10
+num_workers: 0
+run_dir: ${CNF_RUNS}/smoke_test
+wandb_mode: disabled

@@ -1,0 +1,21 @@
+# data, checkpoints and outputs live on Google Drive, not in git
+data/raw/
+data/processed/
+runs/
+outputs/
+wandb/
+*.pt
+*.ckpt
+
+# keep hand-made selections
+!data/selections/
+
+__pycache__/
+*.egg-info/
+.venv/
+.ipynb_checkpoints/
+.DS_Store
+kaggle.json
+
+# credentials
+secrets/
